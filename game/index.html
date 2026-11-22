@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PULSE-PATH — one prompt, one game</title>
+<meta name="viewport" content="width=1280">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:1280px; height:720px; overflow:hidden; }
+  body {
+    font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+    color:#fff;
+    background:
+      radial-gradient(900px 500px at 15% -10%, #00e5ff55, transparent 60%),
+      radial-gradient(900px 600px at 90% 110%, #ff2fd655, transparent 60%),
+      linear-gradient(135deg, #1200ff 0%, #5b00e0 34%, #a100e8 62%, #ff2f92 100%);
+  }
+  body::before { /* dense dot texture so the first view is never empty */
+    content:""; position:fixed; inset:0; pointer-events:none; opacity:.35;
+    background-image: radial-gradient(#ffffff33 1.5px, transparent 1.5px);
+    background-size: 34px 34px;
+  }
+  .wrap { position:relative; width:1280px; height:720px; padding:18px 34px 14px; }
+  header { display:flex; align-items:flex-end; justify-content:space-between; }
+  h1 {
+    font-size:64px; line-height:.95; font-weight:900; letter-spacing:2px;
+    background:linear-gradient(90deg,#7df9ff,#fff,#ffe14d,#7df9ff);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    filter:drop-shadow(0 0 14px #00e5ffaa);
+  }
+  h1 small { display:block; font-size:21px; letter-spacing:4px; color:#ffe14d;
+    -webkit-text-fill-color:#ffe14d; margin-top:6px; font-weight:800; }
+  .timerbox { text-align:right; }
+  .timerbox .lbl { font-size:16px; letter-spacing:3px; color:#bfefff; font-weight:700; }
+  #timer { font-size:64px; font-weight:900; line-height:1; color:#fff;
+    text-shadow:0 0 18px #00e5ff, 0 0 42px #00e5ff88; font-variant-numeric:tabular-nums; }
+  #timer.low { color:#ff5d5d; text-shadow:0 0 18px #ff2f2f, 0 0 42px #ff2f2f88; }
+  main { display:flex; gap:30px; margin-top:14px; align-items:flex-start; }
+  /* ---- grid ---- */
+  #board { position:relative; width:520px; height:520px; flex:0 0 520px;
+    background:#0a1030cc; border:3px solid #7df9ff; border-radius:22px;
+    box-shadow:0 0 34px #00e5ff88, inset 0 0 40px #1b2aff88; padding:12px; }
+  .grid { display:grid; grid-template-columns:repeat(4,1fr); grid-template-rows:repeat(4,1fr);
+    gap:10px; width:100%; height:100%; }
+  .cell { position:relative; border-radius:14px; background:linear-gradient(160deg,#1c2b7a,#120a4d);
+    border:2px solid #4d6bff88; cursor:pointer; overflow:hidden; }
+  .cell:hover { border-color:#7df9ff; }
+  .cell svg { position:absolute; inset:0; width:100%; height:100%;
+    transition: transform .35s cubic-bezier(.3,1.4,.5,1); }
+  .cell.tapped { animation: tapflash .45s ease-out; }
+  @keyframes tapflash { 0%{ box-shadow:0 0 0 0 #ffe14daa, 0 0 26px 8px #ffe14d88; }
+    100%{ box-shadow:0 0 0 14px transparent, 0 0 0 0 transparent; } }
+  .cell.rowlit, .cell.collit { border-color:#ffe14d; }
+  .cell .tapring { position:absolute; inset:6px; border:4px solid #ffe14d; border-radius:10px;
+    opacity:0; pointer-events:none; }
+  .cell.tapped .tapring { animation: ring .5s ease-out; }
+  @keyframes ring { 0%{opacity:1; transform:scale(.85);} 100%{opacity:0; transform:scale(1.15);} }
+  .edge { position:absolute; top:0; bottom:0; width:14px; z-index:3; pointer-events:none; }
+  .edge.in  { left:-14px; background:linear-gradient(90deg,transparent,#00e5ff); border-radius:8px 0 0 8px; }
+  .edge.out { right:-14px; background:linear-gradient(90deg,#ffe14d,transparent); border-radius:0 8px 8px 0; }
+  .edge span { position:absolute; top:50%; font-size:13px; font-weight:900; letter-spacing:1px;
+    transform:translateY(-50%) rotate(0deg); white-space:nowrap; color:#fff;
+    text-shadow:0 0 8px #000; }
+  .edge.in span { left:2px; } .edge.out span { right:2px; }
+  #pulse { position:absolute; width:44px; height:44px; margin:-22px 0 0 -22px; border-radius:50%;
+    background:radial-gradient(circle,#fff 0%,#7df9ff 35%,#0088ff 70%,transparent 72%);
+    box-shadow:0 0 26px 12px #00c8ffcc, 0 0 60px 24px #00c8ff66; z-index:5; display:none; }
+  /* ---- side panel ---- */
+  aside { flex:1; }
+  .promptcard { background:#0a1030d9; border:2px solid #ffe14d66; border-radius:16px;
+    padding:14px 16px; box-shadow:0 0 22px #ffe14d33; }
+  .promptcard .k { font-size:13px; letter-spacing:3px; color:#ffe14d; font-weight:800; }
+  .promptcard p { font-size:19px; line-height:1.45; margin-top:6px; color:#eaf6ff; }
+  .promptcard p b { color:#7df9ff; }
+  .stats { display:flex; gap:12px; margin-top:14px; }
+  .stat { flex:1; background:#0a1030b8; border:2px solid #7df9ff66; border-radius:14px;
+    padding:10px 12px; text-align:center; }
+  .stat .k { font-size:12px; letter-spacing:2px; color:#bfefff; font-weight:700; }
+  .stat .v { font-size:34px; font-weight:900; margin-top:2px; }
+  #status { margin-top:14px; font-size:24px; font-weight:800; min-height:34px;
+    color:#ffe14d; text-shadow:0 0 14px #ffe14d88; }
+  .howto { margin-top:6px; background:#0a1030b8; border-radius:14px; padding:12px 14px;
+    font-size:17px; line-height:1.5; color:#d8ecff; border:2px solid #ffffff22; }
+  .howto b { color:#7df9ff; }
+  .howto .tap { display:inline-block; background:#ffe14d; color:#191419; font-weight:900;
+    border-radius:8px; padding:1px 9px; }
+  button { margin-top:14px; font-size:19px; font-weight:900; letter-spacing:1px;
+    padding:12px 22px; border-radius:12px; border:0; cursor:pointer;
+    background:linear-gradient(90deg,#00e5ff,#7d5bff); color:#06122e;
+    box-shadow:0 0 20px #00e5ff88; }
+  button:hover { filter:brightness(1.15); }
+  footer { margin-top:12px; font-size:15px; letter-spacing:2px; color:#cfe9ffcc; font-weight:700; }
+  footer b { color:#ffe14d; }
+  /* ---- WIN overlay ---- */
+  #win { position:absolute; inset:0; z-index:10; display:none; align-items:center;
+    justify-content:center; flex-direction:column; border-radius:22px;
+    background:radial-gradient(circle,#ffe14d55, #00e5ff33 55%, transparent 75%);
+    animation: winpulse .8s ease-in-out infinite alternate; }
+  @keyframes winpulse { from{ box-shadow:inset 0 0 40px #ffe14d66; } to{ box-shadow:inset 0 0 90px #ffe14dcc; } }
+  #win .big { font-size:62px; font-weight:900; letter-spacing:3px; color:#fff; white-space:nowrap;
+    text-shadow:0 0 24px #ffe14d, 0 0 60px #ff9d00; }
+  #win .sub { font-size:25px; font-weight:800; color:#ffe14d; margin-top:6px;
+    text-shadow:0 0 16px #000; text-align:center; }
+  #win.show { display:flex; }
+  #timeup { position:absolute; inset:0; z-index:10; display:none; align-items:center;
+    justify-content:center; flex-direction:column; border-radius:22px; background:#30060acc; }
+  #timeup .big { font-size:64px; font-weight:900; color:#ff5d5d; text-shadow:0 0 24px #ff2f2f; }
+  #timeup.show { display:flex; }
+  .noanim * { transition:none !important; animation:none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>PULSE-PATH<small>ONE PROMPT &rarr; ONE GAME &bull; BUILT BY AN AI AGENT</small></h1>
+    <div class="timerbox"><div class="lbl">TIME LEFT</div><div id="timer">15.0</div></div>
+  </header>
+  <main>
+    <div id="board">
+      <div class="edge in"><span>&#9654; IN</span></div>
+      <div class="edge out"><span>OUT &#9654;</span></div>
+      <div class="grid" id="grid"></div>
+      <div id="pulse"></div>
+      <div id="win"><div class="big">&#127881; YOU WIN!</div><div class="sub" id="winsub">SCORE 1540</div></div>
+      <div id="timeup"><div class="big">TIME UP!</div><div class="sub" style="color:#fff">Tap RESET and rewire it faster</div></div>
+    </div>
+    <aside>
+      <div class="promptcard">
+        <div class="k">THE ONE PROMPT</div>
+        <p>&ldquo;Build a one-page HTML5 game: <b>PULSE-PATH</b> &mdash; a neon 4&times;4 grid where
+        one tap rotates a whole row <b>AND</b> column, guide the blue pulse from the left edge to
+        the right edge before the <b>15-second</b> timer runs out.&rdquo;</p>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="k">MOVES</div><div class="v" id="moves">0</div></div>
+        <div class="stat"><div class="k">SCORE</div><div class="v" id="score">0</div></div>
+        <div class="stat"><div class="k">BEST</div><div class="v" id="best">1540</div></div>
+      </div>
+      <div id="status">Tap a tile &mdash; its whole row AND column spins!</div>
+      <div class="howto"><span class="tap">TAP</span> any tile to rotate its <b>row + column 90&deg;</b>.
+        Rewire the circuit so the blue pulse can travel <b>left &rarr; right</b>.
+        When the path connects, the pulse fires automatically. Beat the <b>15s</b> clock!</div>
+      <button id="resetBtn">↻ RESET BOARD</button>
+      <button id="demoBtn" style="background:linear-gradient(90deg,#ffe14d,#ff9d00)">▶ AUTO-PLAY DEMO</button>
+      <footer>MADE FROM <b>ONE PROMPT</b> &bull; NO LIBRARIES &bull; PLAYS IN YOUR BROWSER</footer>
+    </aside>
+  </main>
+</div>
+<script>
+"use strict";
+// ---- tile model: connections bitmask N=1 E=2 S=4 W=8 ----
+const N=1,E=2,S=4,W=8;
+const H=E|W, V=N|S;
+const TILE = { H, V, NE:N|E, ES:E|S, SW:S|W, NW:N|W, X:N|E|S|W, TNE:N|E|S, TES:E|S|W };
+// Initial board. Row 1 is all vertical pipes: the demo fixes it with 4 taps,
+// one per column, each tap landing on a different row so earlier fixes survive.
+const INITIAL = [
+  [TILE.NE, TILE.H,  TILE.SW, TILE.V ],
+  [TILE.V,  TILE.V,  TILE.V,  TILE.V ],
+  [TILE.ES, TILE.X,  TILE.NW, TILE.H ],
+  [TILE.V,  TILE.NW, TILE.ES, TILE.NE],
+];
+const COLORS = ["#00e5ff","#7d5bff","#ff2fd6","#ffe14d","#00ff9d","#ff9d00"];
+const DEMO_TAPS = [ // [demoTimeSeconds, row, col]
+  [1.0, 3, 0],
+  [2.6, 0, 1],
+  [4.2, 0, 2],
+  [5.8, 2, 3],
+];
+const PULSE_START = 7.0, PULSE_DUR = 2.6, WIN_TIME = PULSE_START + PULSE_DUR; // 9.6
+const LIMIT = 15;
+const PATH_ROW = 1; // pulse enters row 1 from the left
+
+const params = new URLSearchParams(location.search);
+const DEMO = params.get("demo") === "1";
+const T0 = params.has("t") ? parseFloat(params.get("t")) || 0 : null;
+
+let board, rot, moves, score, over, firing, timerId, startTs, demoTimers = [];
+
+function rotCW(m){ return ((m<<1)&15) | ((m>>3)&1); }
+function svgFor(mask, color){
+  const cx=50, cy=50, arms=[];
+  if(mask&N) arms.push(`<line x1="50" y1="50" x2="50" y2="6"/>`);
+  if(mask&E) arms.push(`<line x1="50" y1="50" x2="94" y2="50"/>`);
+  if(mask&S) arms.push(`<line x1="50" y1="50" x2="50" y2="94"/>`);
+  if(mask&W) arms.push(`<line x1="50" y1="50" x2="6" y2="50"/>`);
+  return `<svg viewBox="0 0 100 100"><g stroke="${color}" stroke-width="15" stroke-linecap="round" fill="none" style="filter:drop-shadow(0 0 6px ${color})">${arms.join("")}</g><circle cx="50" cy="50" r="11" fill="#fff"/></svg>`;
+}
+function buildGrid(){
+  const g = document.getElementById("grid"); g.innerHTML = "";
+  for(let r=0;r<4;r++) for(let c=0;c<4;c++){
+    const d = document.createElement("div");
+    d.className = "cell"; d.dataset.r=r; d.dataset.c=c;
+    d.innerHTML = svgFor(board[r][c], COLORS[(r*4+c)%COLORS.length]) + '<div class="tapring"></div>';
+    d.addEventListener("click", ()=>{ if(!DEMO) onTap(r,c); });
+    g.appendChild(d);
+  }
+  applyRotations(false);
+}
+function applyRotations(animate){
+  document.querySelectorAll(".cell").forEach(el=>{
+    const r=+el.dataset.r, c=+el.dataset.c;
+    el.querySelector("svg").style.transform = `rotate(${rot[r][c]}deg)`;
+  });
+}
+function cellEl(r,c){ return document.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`); }
+function setStatus(t){ document.getElementById("status").textContent = t; }
+function setMoves(n){ moves=n; document.getElementById("moves").textContent = n; }
+function setScore(n){ score=n; document.getElementById("score").textContent = n; }
+function setTimer(sec){
+  const el = document.getElementById("timer");
+  el.textContent = Math.max(0,sec).toFixed(1);
+  el.classList.toggle("low", sec <= 5);
+}
+function rotateRowCol(r,c){
+  for(let i=0;i<4;i++){ board[r][i]=rotCW(board[r][i]); rot[r][i]+=90; }
+  for(let i=0;i<4;i++){ if(i!==r){ board[i][c]=rotCW(board[i][c]); rot[i][c]+=90; } }
+  applyRotations(true);
+}
+function findPath(){
+  // BFS from left edge into (PATH_ROW,0) from the west; returns cell list or null.
+  if(!(board[PATH_ROW][0]&W)) return null;
+  const prev = Array.from({length:4},()=>Array(4).fill(null));
+  const q=[[PATH_ROW,0,"W"]]; const seen=new Set(["1,0"]);
+  const DIRS=[[N,-1,0,S],[E,0,1,W],[S,1,0,N],[W,0,-1,E]];
+  while(q.length){
+    const [r,c,from]=q.shift();
+    if(c===3 && (board[r][c]&E)) { // reached exit: rebuild path
+      const path=[]; let cur=[r,c];
+      while(cur){ path.unshift(cur); cur=prev[cur[0]][cur[1]]; }
+      return path;
+    }
+    for(const [dir,dr,dc,opp] of DIRS){
+      if(dir===({N, E, S, W})[from]) continue; // cannot exit back the way we came in
+      if(!(board[r][c]&dir)) continue;
+      const nr=r+dr, nc=c+dc;
+      if(nr<0||nr>3||nc<0||nc>3) continue;
+      if(!(board[nr][nc]&opp)) continue;
+      if(seen.has(nr+","+nc)) continue;
+      seen.add(nr+","+nc); prev[nr][nc]=[r,c]; q.push([nr,nc,({[N]:"S",[E]:"W",[S]:"N",[W]:"E"})[dir]]);
+    }
+  }
+  return null;
+}
+function cellCenter(r,c){
+  const boardEl=document.getElementById("board").getBoundingClientRect();
+  const el=cellEl(r,c).getBoundingClientRect();
+  return { x: el.left-boardEl.left+el.width/2, y: el.top-boardEl.top+el.height/2, w: el.width };
+}
+function showPulseAt(frac, path){
+  // frac 0..1 along path cells then out the right edge
+  const p=document.getElementById("pulse");
+  const n=path.length, total=n+0.6, pos=frac*total;
+  let x,y;
+  if(pos < n){
+    const i=Math.min(n-1, Math.floor(pos)), f=pos-i;
+    const a=cellCenter(path[i][0],path[i][1]);
+    const b = i+1<n ? cellCenter(path[i+1][0],path[i+1][1]) : {x:a.x+a.w, y:a.y};
+    x=a.x+(b.x-a.x)*f; y=a.y+(b.y-a.y)*f;
+  } else {
+    const a=cellCenter(path[n-1][0],path[n-1][1]);
+    x=a.x+a.w*(0.5+(pos-n)); y=a.y;
+  }
+  p.style.display="block"; p.style.left=x+"px"; p.style.top=y+"px";
+}
+function doWin(remaining){
+  if(over) return; over=true; firing=false;
+  const pts = 1000 + Math.round(remaining*100);
+  setScore(pts);
+  document.getElementById("pulse").style.display="none";
+  document.getElementById("winsub").textContent = "SCORE " + pts + "  •  " + moves + " MOVES  •  " + remaining.toFixed(1) + "s LEFT";
+  document.getElementById("win").classList.add("show");
+  setStatus("🏆 Path complete — the pulse made it home!");
+}
+function runPulseLive(path, remaining){
+  if(firing) return; firing=true;
+  const t0=performance.now();
+  const p=document.getElementById("pulse"); p.style.display="block";
+  (function step(now){
+    const f=Math.min(1,(now-t0)/(PULSE_DUR*1000));
+    showPulseAt(f,path);
+    if(f<1 && !over) requestAnimationFrame(step);
+    else if(!over) doWin(remaining);
+  })(t0);
+}
+function checkAndFire(remaining){
+  const path=findPath();
+  if(path){ setStatus("⚡ Path connected — pulse firing!"); runPulseLive(path, remaining); return true; }
+  return false;
+}
+function onTap(r,c, silent){
+  if(over) return;
+  if(moves===0) startTimer();
+  const el=cellEl(r,c);
+  el.classList.remove("tapped"); void el.offsetWidth; el.classList.add("tapped");
+  for(let i=0;i<4;i++){ cellEl(r,i).classList.add("rowlit"); cellEl(i,c).classList.add("collit"); }
+  setTimeout(()=>{ document.querySelectorAll(".rowlit,.collit").forEach(e=>e.classList.remove("rowlit","collit")); }, 420);
+  rotateRowCol(r,c);
+  setMoves(moves+1);
+  setStatus(`Tap ${moves}: row ${r+1} + column ${c+1} spun 90° — rewiring…`);
+  setTimeout(()=>{
+    const rem = LIMIT - (performance.now()-startTs)/1000;
+    if(!checkAndFire(Math.max(0,rem))) setStatus("Not connected yet — keep spinning!");
+  }, 400);
+}
+function startTimer(){
+  if(timerId) return; // demo already runs its own clock
+  startTs=performance.now();
+  clearInterval(timerId);
+  timerId=setInterval(()=>{
+    const rem=LIMIT-(performance.now()-startTs)/1000;
+    setTimer(rem);
+    if(rem<=0){ clearInterval(timerId); if(!over){ over=true;
+      document.getElementById("timeup").classList.add("show"); setStatus("⏱ Time up — hit RESET and go again!"); } }
+  }, 100);
+}
+function reset(){
+  clearInterval(timerId); timerId=null; demoTimers.forEach(clearTimeout); demoTimers=[];
+  board=INITIAL.map(r=>r.slice()); rot=Array.from({length:4},()=>Array(4).fill(0));
+  over=false; firing=false; setMoves(0); setScore(0); setTimer(LIMIT); setStatus("Tap a tile — its whole row AND column spins!");
+  document.getElementById("win").classList.remove("show");
+  document.getElementById("timeup").classList.remove("show");
+  document.getElementById("pulse").style.display="none";
+  buildGrid();
+}
+// ---- demo mode ----
+function applyDemoUpTo(t){
+  // instant, no animation: apply scripted taps with time<=t, place pulse / win state
+  document.body.classList.add("noanim");
+  for(const [tt,r,c] of DEMO_TAPS){
+    if(tt<=t){ rotateRowCol(r,c); setMoves(moves+1); }
+  }
+  setTimer(t >= WIN_TIME ? LIMIT - WIN_TIME : LIMIT - t);
+  if(t >= WIN_TIME){
+    const path=findPath();
+    if(path){ showPulseAt(1, path); doWin(LIMIT - WIN_TIME); }
+  } else if(t >= PULSE_START){
+    const path=findPath();
+    if(path) showPulseAt((t-PULSE_START)/PULSE_DUR, path);
+    setStatus("⚡ Path connected — pulse firing!");
+  } else if(t >= 0){
+    setStatus("🤖 Agent demo: spinning rows + columns…");
+  }
+  document.body.classList.remove("noanim");
+}
+function runDemoLive(){
+  setStatus("🤖 Agent demo: watch it solve itself…");
+  startTs=performance.now();
+  timerId=setInterval(()=>setTimer(LIMIT-(performance.now()-startTs)/1000), 100);
+  for(const [tt,r,c] of DEMO_TAPS){
+    demoTimers.push(setTimeout(()=>{ onTap(r,c); }, tt*1000));
+  }
+  demoTimers.push(setTimeout(()=>{
+    const rem=LIMIT-WIN_TIME;
+    const path=findPath();
+    if(path){ setStatus("⚡ Path connected — pulse firing!"); runPulseLive(path, rem); }
+  }, PULSE_START*1000));
+}
+document.getElementById("resetBtn").addEventListener("click", reset);
+document.getElementById("demoBtn").addEventListener("click", ()=>{ location.search="?demo=1"; });
+
+reset();
+if(DEMO){
+  if(T0!==null){ applyDemoUpTo(T0); }
+  else runDemoLive();
+}
+</script>
+</body>
+</html>

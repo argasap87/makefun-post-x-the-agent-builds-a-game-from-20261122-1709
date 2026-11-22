@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Slide 2 — agent building</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:1280px; height:720px; overflow:hidden; }
+  body {
+    font-family: "Segoe UI", Arial, sans-serif; color:#e8f6ff;
+    background:
+      radial-gradient(800px 500px at 100% 0%, #ff2fd633, transparent 60%),
+      linear-gradient(135deg, #0b0620 0%, #160b3d 60%, #2a0b4d 100%);
+  }
+  .wrap { width:1280px; height:720px; padding:34px 40px; }
+  header { display:flex; justify-content:space-between; align-items:center; }
+  h2 { font-size:38px; font-weight:900; letter-spacing:1px; }
+  h2 .spin { display:inline-block; animation:spin 1.2s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  h2 span { color:#7df9ff; }
+  #clock { font-size:26px; font-weight:800; color:#ffe14d; font-variant-numeric:tabular-nums; }
+  main { display:flex; gap:24px; margin-top:20px; }
+  .code { flex:0 0 780px; background:#05030f; border:2px solid #2b3a7a; border-radius:16px;
+    overflow:hidden; box-shadow:0 0 34px #00e5ff22; }
+  .code .bar { padding:10px 16px; background:#141040; border-bottom:2px solid #2b3a7a;
+    font-family:monospace; font-size:16px; color:#8fa8d8; }
+  .code .bar b { color:#7df9ff; }
+  #lines { padding:12px 0 12px 14px; font-family:"DejaVu Sans Mono", monospace;
+    font-size:16.5px; line-height:1.5; color:#cfe9ff; white-space:pre; }
+  #lines .ln { color:#4a5a8a; display:inline-block; width:34px; text-align:right; margin-right:12px; }
+  #lines .kw { color:#ff7ad9; } #lines .str { color:#ffe14d; } #lines .fn { color:#7df9ff; }
+  aside { flex:1; }
+  .tree { background:#0a1030d9; border:2px solid #ffe14d55; border-radius:16px; padding:16px 18px; }
+  .tree h3 { font-size:16px; letter-spacing:3px; color:#ffe14d; margin-bottom:10px; }
+  .tree .f { font-family:monospace; font-size:18px; line-height:1.7; color:#d8ecff; }
+  .tree .f .ok { color:#00ff9d; font-weight:700; }
+  .tree .f .wr { color:#ffe14d; font-weight:700; }
+  .log { margin-top:14px; background:#05030f; border:2px solid #2b3a7a; border-radius:16px;
+    padding:12px 16px; font-family:monospace; font-size:15px; line-height:1.6; color:#9fd8ff; }
+  .log b { color:#00ff9d; }
+  .log .t { color:#4a5a8a; }
+  footer { margin-top:18px; font-size:19px; letter-spacing:2px; color:#9fd8ff; font-weight:700; }
+  footer b { color:#ffe14d; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h2><span class="spin">⚙️</span> agent is <span>building…</span></h2>
+    <div id="clock">0.0s</div>
+  </header>
+  <main>
+    <div class="code">
+      <div class="bar">● <b>game/index.html</b> — real code, streaming in live</div>
+      <div id="lines"></div>
+    </div>
+    <aside>
+      <div class="tree">
+        <h3>WORKSPACE</h3>
+        <div class="f" id="tree"></div>
+      </div>
+      <div class="log" id="log"></div>
+    </aside>
+  </main>
+  <footer>ONE PROMPT IN &nbsp;·&nbsp; <b>PULSE-PATH</b> OUT &nbsp;·&nbsp; 4×4 GRID · 15s TIMER · DEMO MODE</footer>
+</div>
+<script>
+// __CODE_LINES__ is replaced by render.py with real lines from game/index.html
+const CODE = /*__CODE_LINES__*/[];
+const FILES = [
+  [0.5,  "📁 game/"],
+  [1.2,  "   └─ <b>index.html</b> <span class='ok'>✓ written</span>"],
+  [3.0,  "📁 video/"],
+  [3.6,  "   └─ pulse-path-x.mp4 <span class='wr'>… rendering</span>"],
+  [6.0,  "📄 POST.json <span class='wr'>… awaiting X post</span>"],
+  [8.0,  "📄 README.md <span class='ok'>✓ written</span>"],
+];
+const LOGS = [
+  [0.0,  "<span class='t'>00.0</span> <b>✓</b> prompt parsed — 4×4 grid, 15s timer"],
+  [1.5,  "<span class='t'>01.5</span> <b>✓</b> board wired — 16 neon tiles"],
+  [3.2,  "<span class='t'>03.2</span> <b>✓</b> pulse engine on — auto-fires"],
+  [5.0,  "<span class='t'>05.0</span> <b>✓</b> demo mode — ?demo=1 plays itself"],
+  [7.0,  "<span class='t'>07.0</span> <b>✓</b> win flash + score 1540"],
+  [8.5,  "<span class='t'>08.5</span> <b>✓</b> capturing gameplay…"],
+];
+const t = parseFloat(new URLSearchParams(location.search).get("t") || "0");
+document.getElementById("clock").textContent = t.toFixed(1) + "s";
+// scrolling window: show the newest 18 lines so the stream keeps moving
+const end = Math.floor(t * 7), start = Math.max(0, end - 18);
+const shown = CODE.slice(start, end);
+document.getElementById("lines").innerHTML = shown.map((ln, i) => {
+  const esc = ln.replace(/&/g,"&amp;").replace(/</g,"&lt;");
+  return `<span class="ln">${start+i+1}</span>${esc}`;
+}).join("\n") || '<span class="ln">1</span><span style="color:#4a5a8a">// writing game/index.html …</span>';
+document.getElementById("tree").innerHTML = FILES.filter(f => t >= f[0]).map(f => f[1]).join("<br>");
+document.getElementById("log").innerHTML = LOGS.filter(l => t >= l[0]).map(l => l[1]).join("<br>");
+</script>
+</body>
+</html>

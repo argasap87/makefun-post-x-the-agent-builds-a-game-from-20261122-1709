@@ -1,0 +1,5 @@
+out/
+video/.frames/
+video/frames_check/
+video/card_end_*.png
+video/card_s*.png
